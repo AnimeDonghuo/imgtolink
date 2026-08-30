@@ -18,7 +18,10 @@ A Telegram bot that converts images into **direct shareable links** (imgBB / fal
 
 | Command | Description |
 | --- | --- |
-| `/start` | Welcome message |
+| `/start` | Welcome message with a branded banner (rotates through 20 images) |
+| `/help` | List of commands and how to use the bot |
+| `/about` | About the bot (developer, channel, source) |
+| `/stats` / `/status` | Bot statistics: users, images converted, uptime, database status |
 | `/users` | Total registered users (requires MongoDB) |
 | *send an image* | Upload it and get a direct link |
 
@@ -31,7 +34,8 @@ A Telegram bot that converts images into **direct shareable links** (imgBB / fal
 | Server now uses Deno's built-in `Deno.serve` | Zero external runtime imports, faster cold start on Koyeb |
 | Listens on `0.0.0.0:<PORT>` (Koyeb sets `PORT=8000`) | Koyeb's **TCP health check** connects to the exposed port — it passes because the server is actually listening |
 | `GET /health` returns `200 OK` | Optional HTTP health check endpoint |
-| `GET /welcome.jpg` serves 20 bundled welcome images | The original welcome image host (`i.imghippo.com`) is dead — the bot now serves its own images, and a **random one is shown on every `/start`** (with a rotating caption) |
+| `GET /welcome.jpg` serves 20 branded welcome images | The original welcome image host (`i.imghippo.com`) is dead — the bot now serves its own images (branded "IMG TO LINK"), and a **random one is shown on every `/start`** (with a rotating caption) |
+| `/start` never hangs | All Telegram/DB calls have timeouts and a guaranteed text fallback — the original code could stall on a slow photo send or MongoDB insert and deliver nothing |
 | Added `Dockerfile` | Koyeb builds the bot from the official `denoland/deno` image |
 | Added `koyeb.yaml` | Declarative Koyeb config: free-tier `nano` instance, port 8000, TCP health check |
 | Upload fallbacks | If the original imgBB proxy endpoint is down, uploads fall back to the official imgBB API (optional key) and then a keyless host — the bot keeps working |
