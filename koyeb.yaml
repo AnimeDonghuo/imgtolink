@@ -1,0 +1,35 @@
+# Koyeb declarative deployment configuration
+# ---------------------------------------------------------------
+# - Builds this repo with the Dockerfile
+# - Exposes port 8000 (HTTP) and routes all traffic to it
+# - Koyeb runs a TCP health check on port 8000 by default; the bot
+#   binds 0.0.0.0:8000 so the check passes automatically.
+#   (GET /health is also available for HTTP health checks.)
+# - "nano" is the free-tier instance type.
+#
+# After deploying, add these environment variables in the Koyeb
+# dashboard (Service -> Settings -> Environment variables):
+#   BOT_TOKEN        (required) Telegram bot token from @BotFather
+#   CHANNEL_USERNAME (required) e.g. @YourChannel  (bot must be admin)
+#   MONGO_URI        (optional) MongoDB connection string
+#   IMGBB_API_KEY    (optional) official imgBB API key
+# ---------------------------------------------------------------
+name: imgtolink
+services:
+  - name: web
+    type: web
+    instance_type: nano
+    regions:
+      - fra
+    git:
+      repository: github.com/AnimeDonghuo/imgtolink
+      branch: main
+    build:
+      type: docker
+      dockerfile: ./Dockerfile
+    ports:
+      - port: 8000
+        protocol: http
+    routes:
+      - path: /
+        port: 8000
