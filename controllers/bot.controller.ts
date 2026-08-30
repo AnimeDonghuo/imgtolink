@@ -115,6 +115,11 @@ export const BotController = {
     const cmd = getCommand(text);
 
     try {
+      console.log(
+        `📥 Update #${update.update_id} | user ${userId} | chat ${chatId} | ` +
+          (cmd ? `cmd /${cmd}` : text ? `text "${text.slice(0, 40)}"` : photo ? "photo" : document ? "document" : "other"),
+      );
+
       // ------------------------- /start -------------------------
       if (cmd === "start") {
         // DB tracking must never block /start (a hanging insert used to
@@ -261,7 +266,15 @@ export const BotController = {
 
       // --------------------- image upload -----------------------
       if (photo || document?.mime_type?.startsWith("image/")) {
-        const hasAccess = await SubscriptionService.checkSubscription(chatId);
+        let hasAccess = false;
+        try {
+          hasAccess = await withTimeout(
+            SubscriptionService.checkSubscription(chatId),
+            8000,
+          );
+        } catch (error) {
+          console.error("⚠️ Subscription check failed:", error);
+        }
         if (!hasAccess) {
           await safeSend(
             chatId,
@@ -280,9 +293,28 @@ export const BotController = {
           fileId = document.file_id;
         }
 
-        const imageUrl = await ImageUploadService.uploadImage(
-          await (await fetch(await TelegramService.getFileUrl(fileId))).arrayBuffer(),
-        );
+        let imageUrl: string | null = null;
+        try {
+          console.log(`⬇️ Downloading file ${fileId} ...`);
+          const fileUrl = await withTimeout(
+            TelegramService.getFileUrl(fileId),
+            8000,
+          );
+          const buffer = await withTimeout(
+            (async () => {
+              const res = await fetch(fileUrl);
+              if (!res.ok) throw new Error(`download HTTP ${res.status}`);
+              return res.arrayBuffer();
+            })(),
+            15000,
+          );
+          imageUrl = await withTimeout(
+            ImageUploadService.uploadImage(buffer),
+            20000,
+          );
+        } catch (error) {
+          console.error("⚠️ Image pipeline error:", error);
+        }
 
         if (imageUrl) imagesConverted++;
 

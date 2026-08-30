@@ -33,6 +33,9 @@ A Telegram bot that converts images into **direct shareable links** (imgBB / fal
 | --- | --- |
 | Server now uses Deno's built-in `Deno.serve` | Zero external runtime imports, faster cold start on Koyeb |
 | Listens on `0.0.0.0:<PORT>` (Koyeb sets `PORT=8000`) | Koyeb's **TCP health check** connects to the exposed port — it passes because the server is actually listening |
+| Webhook updates acknowledged instantly, processed in the background | Slow Telegram/DB calls can never make Telegram time out and retry — the original bot could stall and reply **nothing** |
+| Timeouts on every external call (DB, Telegram API, downloads, uploads) | A hanging call can no longer block a reply |
+| Boot-time webhook diagnostics + auto `setWebhook` | The bot logs `getWebhookInfo` at boot and registers its own webhook (`KOYEB_PUBLIC_DOMAIN` / `APP_URL`) — no more "webhook points to the wrong URL" issues |
 | `GET /health` returns `200 OK` | Optional HTTP health check endpoint |
 | `GET /welcome.jpg` serves 20 branded welcome images | The original welcome image host (`i.imghippo.com`) is dead — the bot now serves its own images (branded "IMG TO LINK"), and a **random one is shown on every `/start`** (with a rotating caption) |
 | `/start` never hangs | All Telegram/DB calls have timeouts and a guaranteed text fallback — the original code could stall on a slow photo send or MongoDB insert and deliver nothing |
@@ -55,6 +58,7 @@ The bot behavior is otherwise **identical** to the original.
 | `MONGO_URI` | MongoDB connection string (enables `/users`) | ❌ No |
 | `IMGBB_API_KEY` | Official imgBB API key — used as the first upload provider when set | ❌ No |
 | `WELCOME_IMAGE_URL` | Custom https:// URL for the `/start` welcome image (by default the bot rotates 20 bundled images automatically) | ❌ No |
+| `APP_URL` | Public URL of the app (e.g. `https://mybot-org.koyeb.app`) — the bot auto-registers the Telegram webhook to it on boot. Falls back to Koyeb's automatic `KOYEB_PUBLIC_DOMAIN` | ❌ No |
 | `PORT` | Port the webhook server listens on (Koyeb sets this to `8000`) | ❌ No |
 
 ---
@@ -88,7 +92,17 @@ The bot behavior is otherwise **identical** to the original.
 
 ### Set the Telegram webhook
 
-After deployment, open this URL in your browser (replace `BOT_TOKEN` and `YOUR_APP.koyeb.app`):
+**Automatic:** the bot registers its own webhook on every boot. It knows its
+public URL from Koyeb's automatic `KOYEB_PUBLIC_DOMAIN` variable (or `APP_URL`
+if you set one), and the boot log shows it:
+
+```
+🌐 Public base URL: https://mybot-org.koyeb.app
+📡 Webhook info: {"url":null,"pending_updates":0,...}
+🔗 setWebhook https://mybot-org.koyeb.app/: {"ok":true,...}
+```
+
+**Manual (if you prefer):** open this URL in your browser (replace `BOT_TOKEN` and `YOUR_APP.koyeb.app`):
 
 ```
 https://api.telegram.org/botBOT_TOKEN/setWebhook?url=https://YOUR_APP.koyeb.app/

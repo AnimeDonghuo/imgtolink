@@ -42,3 +42,11 @@ export const CLEAN_USERNAME = CHANNEL_USERNAME.replace(/@/g, "");
 // When set, uploads are tried on the official API first,
 // then the legacy proxy, then the keyless fallback host.
 export const IMGBB_API_KEY = Deno.env.get("IMGBB_API_KEY") ?? null;
+
+// Public URL of this app. Koyeb provides KOYEB_PUBLIC_DOMAIN automatically
+// (e.g. "app-org.koyeb.app"); set APP_URL explicitly to override (e.g. when
+// using a custom domain). Used to auto-register the Telegram webhook at boot.
+export const APP_URL = Deno.env.get("APP_URL") ?? null;
+export const KOYEB_PUBLIC_DOMAIN = Deno.env.get("KOYEB_PUBLIC_DOMAIN") ?? null;
+export const PUBLIC_BASE_URL = APP_URL ?? (KOYEB_PUBLIC_DOMAIN ? `https://${KOYEB_PUBLIC_DOMAIN}` : null);
+if (PUBLIC_BASE_URL) console.log(`🌐 Public base URL: ${PUBLIC_BASE_URL}`);

@@ -9,13 +9,38 @@
  * - GET /welcome/<file>.jpg : a specific welcome image by filename
  * - POST /           : Telegram webhook updates
  *
+ * Reliability:
+ * - Webhook updates are acknowledged with 200 instantly and processed in the
+ *   background, so slow Telegram/DB calls can never make Telegram time out.
+ * - At boot the bot logs the current webhook status (getWebhookInfo) and, when
+ *   it knows its public URL (KOYEB_PUBLIC_DOMAIN or APP_URL), automatically
+ *   (re)sets the webhook to itself.
+ *
  * Uses Deno's built-in HTTP server (no external imports), so the app
  * has zero runtime dependencies outside the code in this repo.
  */
 
 import { BotController } from "./controllers/bot.controller.ts";
+import { PUBLIC_BASE_URL } from "./config/config.ts";
 
 const PORT = Number.parseInt(Deno.env.get("PORT") ?? "8000", 10) || 8000;
+
+/** Reject a promise if it doesn't settle within ms — prevents hangs. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 // Load all bundled welcome images once at boot (needs --allow-read).
 const WELCOME_IMAGES: { name: string; data: Uint8Array }[] = [];
@@ -82,6 +107,50 @@ function getBaseUrl(req: Request): string | null {
   return host ? `${proto}://${host}` : null;
 }
 
+/**
+ * Log the currently registered webhook and, when the bot knows its own
+ * public URL, (re)set the webhook to itself. Runs detached at boot — a
+ * failure here must never block the server from starting.
+ */
+async function bootstrapWebhook(): Promise<void> {
+  const token = Deno.env.get("BOT_TOKEN");
+  if (!token) return;
+
+  try {
+    const infoRes = await withTimeout(
+      fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`),
+      10000,
+    );
+    const info = (await infoRes.json()) as any;
+    console.log(
+      "📡 Webhook info:",
+      JSON.stringify({
+        url: info?.result?.url ?? null,
+        pending_updates: info?.result?.pending_update_count ?? null,
+        last_error: info?.result?.last_error_message ?? null,
+      }),
+    );
+
+    const target = PUBLIC_BASE_URL ? `${PUBLIC_BASE_URL}/` : null;
+    if (target && info?.result?.url !== target) {
+      const res = await withTimeout(
+        fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: target, drop_pending_updates: true }),
+        }),
+        10000,
+      );
+      const data = (await res.json()) as any;
+      console.log(`🔗 setWebhook ${target}:`, JSON.stringify(data));
+    } else if (target) {
+      console.log(`🔗 Webhook already set to ${target}`);
+    }
+  } catch (error) {
+    console.error("⚠️ Webhook bootstrap skipped:", (error as Error).message);
+  }
+}
+
 async function handler(req: Request): Promise<Response> {
   try {
     const url = new URL(req.url);
@@ -106,9 +175,20 @@ async function handler(req: Request): Promise<Response> {
       } catch {
         return new Response("Bad Request", { status: 400 });
       }
-      // Pass the app's public base URL so the bot can build the
-      // self-hosted welcome image URLs (https://<app>.koyeb.app/welcome/...).
-      return await BotController.handleUpdate(update, getBaseUrl(req));
+      const baseUrl = getBaseUrl(req);
+
+      // Acknowledge instantly, then process in the background. If we kept
+      // the webhook waiting on Telegram/DB calls, Telegram could time out,
+      // retry, and the user would see no reply (the original bug).
+      (async () => {
+        try {
+          await BotController.handleUpdate(update, baseUrl);
+        } catch (error) {
+          console.error("⚠️ Background update error:", error);
+        }
+      })();
+
+      return new Response("OK");
     }
 
     return new Response("Umm... what?", { status: 200 });
@@ -122,3 +202,6 @@ console.log(`🚀 Starting Image Uploader Bot on 0.0.0.0:${PORT} ...`);
 
 // Bind to 0.0.0.0 so Koyeb's TCP health check and edge router can reach us.
 Deno.serve({ port: PORT, hostname: "0.0.0.0" }, handler);
+
+// Non-blocking: log webhook status and auto-set the webhook when possible.
+bootstrapWebhook();
