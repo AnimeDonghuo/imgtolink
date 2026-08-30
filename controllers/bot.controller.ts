@@ -5,9 +5,22 @@ import { SubscriptionService } from "../services/subscription.service.ts";
 import {
   USE_DB,
   WELCOME_IMAGE_URL,
+  WELCOME_IMAGE_COUNT,
   DEVELOPER_ID,
   CLEAN_USERNAME,
 } from "../config/config.ts";
+
+// Rotating welcome captions — a random one is picked with each /start.
+const WELCOME_TEXTS = [
+  `<b>🖍️ Welcome to Image Link Bot!</b>\n\n<i>Send me an image (as photo or file) to get a shareable link</i>`,
+  `<b>🖼️ Hey! Welcome to Image Link Bot.</b>\n\n<i>Drop any image and I'll turn it into a direct link instantly</i>`,
+  `<b>⚡ Image Link Bot is here!</b>\n\n<i>Send a photo or file and get a shareable direct link</i>`,
+  `<b>🚀 Welcome aboard!</b>\n\n<i>Send me an image to get a direct, shareable link</i>`,
+];
+
+function randomInt(max: number): number {
+  return Math.floor(Math.random() * max);
+}
 
 export const BotController = {
   async handleUpdate(update: any, baseUrl: string | null = null): Promise<Response> {
@@ -21,9 +34,7 @@ export const BotController = {
       if (text === "/start") {
         if (USE_DB) await UserRepository.createUser(userId);
 
-        const welcomeText =
-          `<b>🖍️ Welcome to Image Link Bot!</b>\n\n` +
-          `<i>Send me an image (as photo or file) to get a shareable link</i>`;
+        const welcomeText = WELCOME_TEXTS[randomInt(WELCOME_TEXTS.length)];
 
         const replyMarkup = {
           inline_keyboard: [
@@ -42,10 +53,13 @@ export const BotController = {
           ],
         };
 
-        // The bot serves its own welcome image at /welcome.jpg, so we can
-        // point Telegram at ourselves instead of a flaky external host.
-        const welcomeImageUrl =
-          WELCOME_IMAGE_URL ?? (baseUrl ? `${baseUrl}/welcome.jpg` : null);
+        // Pick a random one of the 20 bundled welcome images and point
+        // Telegram at our own webhook URL — no external image host needed.
+        const welcomeImageUrl = WELCOME_IMAGE_URL
+          ? WELCOME_IMAGE_URL
+          : baseUrl
+          ? `${baseUrl}/welcome/welcome-${String(randomInt(WELCOME_IMAGE_COUNT) + 1).padStart(2, "0")}.jpg`
+          : null;
 
         if (welcomeImageUrl) {
           // Send the welcome photo, but fall back to a plain text message

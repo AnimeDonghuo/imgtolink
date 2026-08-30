@@ -4,10 +4,12 @@ export const SUBSCRIPTION_CHECK_BOT_TOKEN = BOT_TOKEN;
 export const CHANNEL_USERNAME = Deno.env.get("CHANNEL_USERNAME"); // example -> @Private_Bots
 export const DEVELOPER_ID = 7855536617;
 
-// Welcome image. By default the bot serves the bundled image from its own
-// webhook URL (https://<app>.koyeb.app/welcome.jpg) — no external host needed.
-// Set WELCOME_IMAGE_URL to an https:// URL to override it.
+// Welcome image. The bot serves 20 bundled images from its own webhook URL
+// (https://<app>.koyeb.app/welcome/welcome-NN.jpg) and rotates a random one
+// on every /start — no external host needed.
+// Set WELCOME_IMAGE_URL to a fixed https:// URL to disable rotation.
 export const WELCOME_IMAGE_URL = Deno.env.get("WELCOME_IMAGE_URL") ?? null;
+export const WELCOME_IMAGE_COUNT = 20;
 
 // Validate required variables
 const requiredVars = ["BOT_TOKEN", "CHANNEL_USERNAME"];

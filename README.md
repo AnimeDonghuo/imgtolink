@@ -31,7 +31,7 @@ A Telegram bot that converts images into **direct shareable links** (imgBB / fal
 | Server now uses Deno's built-in `Deno.serve` | Zero external runtime imports, faster cold start on Koyeb |
 | Listens on `0.0.0.0:<PORT>` (Koyeb sets `PORT=8000`) | Koyeb's **TCP health check** connects to the exposed port — it passes because the server is actually listening |
 | `GET /health` returns `200 OK` | Optional HTTP health check endpoint |
-| `GET /welcome.jpg` serves the bundled welcome image | The original welcome image host (`i.imghippo.com`) is dead — the bot now serves its own image, so `/start` photos always work |
+| `GET /welcome.jpg` serves 20 bundled welcome images | The original welcome image host (`i.imghippo.com`) is dead — the bot now serves its own images, and a **random one is shown on every `/start`** (with a rotating caption) |
 | Added `Dockerfile` | Koyeb builds the bot from the official `denoland/deno` image |
 | Added `koyeb.yaml` | Declarative Koyeb config: free-tier `nano` instance, port 8000, TCP health check |
 | Upload fallbacks | If the original imgBB proxy endpoint is down, uploads fall back to the official imgBB API (optional key) and then a keyless host — the bot keeps working |
@@ -50,7 +50,7 @@ The bot behavior is otherwise **identical** to the original.
 | `CHANNEL_USERNAME` | Make the bot admin in a channel and put `@ChannelUsername` here | ✅ Yes |
 | `MONGO_URI` | MongoDB connection string (enables `/users`) | ❌ No |
 | `IMGBB_API_KEY` | Official imgBB API key — used as the first upload provider when set | ❌ No |
-| `WELCOME_IMAGE_URL` | Custom https:// URL for the `/start` welcome image (defaults to the bot's own `/welcome.jpg`) | ❌ No |
+| `WELCOME_IMAGE_URL` | Custom https:// URL for the `/start` welcome image (by default the bot rotates 20 bundled images automatically) | ❌ No |
 | `PORT` | Port the webhook server listens on (Koyeb sets this to `8000`) | ❌ No |
 
 ---

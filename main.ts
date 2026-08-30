@@ -5,8 +5,8 @@
  * - Listens on 0.0.0.0:<PORT>  (Koyeb sets PORT=8000 — the Koyeb convention)
  * - TCP health check : passes automatically because the server binds the port
  * - GET /health      : 200 OK (available for HTTP health checks too)
- * - GET /welcome.jpg : the /start welcome image, served by the bot itself
- *                      (no external image host needed)
+ * - GET /welcome.jpg : a random one of the 20 bundled /start welcome images
+ * - GET /welcome/<file>.jpg : a specific welcome image by filename
  * - POST /           : Telegram webhook updates
  *
  * Uses Deno's built-in HTTP server (no external imports), so the app
@@ -17,13 +17,27 @@ import { BotController } from "./controllers/bot.controller.ts";
 
 const PORT = Number.parseInt(Deno.env.get("PORT") ?? "8000", 10) || 8000;
 
-// Load the welcome image once at boot (needs --allow-read).
-let WELCOME_IMAGE: Uint8Array | null = null;
+// Load all bundled welcome images once at boot (needs --allow-read).
+const WELCOME_IMAGES: { name: string; data: Uint8Array }[] = [];
 try {
-  WELCOME_IMAGE = await Deno.readFile("./assets/welcome.jpg");
-  console.log(`✅ Welcome image loaded (${WELCOME_IMAGE.byteLength} bytes)`);
+  for await (const entry of Deno.readDir("./assets/welcome")) {
+    if (entry.isFile && entry.name.endsWith(".jpg")) {
+      const data = await Deno.readFile(`./assets/welcome/${entry.name}`);
+      WELCOME_IMAGES.push({ name: entry.name, data });
+    }
+  }
+  WELCOME_IMAGES.sort((a, b) => a.name.localeCompare(b.name));
+  let total = 0;
+  for (const img of WELCOME_IMAGES) total += img.data.byteLength;
+  console.log(`✅ Loaded ${WELCOME_IMAGES.length} welcome images (${(total / 1024).toFixed(0)} KB)`);
 } catch (error) {
-  console.error("⚠️ Could not load assets/welcome.jpg:", error);
+  console.error("⚠️ Could not load assets/welcome/:", error);
+}
+
+function randomWelcomeImage(): Uint8Array | null {
+  if (WELCOME_IMAGES.length === 0) return null;
+  const pick = WELCOME_IMAGES[Math.floor(Math.random() * WELCOME_IMAGES.length)];
+  return pick.data;
 }
 
 function handleHealthCheck(req: Request): Response {
@@ -31,14 +45,28 @@ function handleHealthCheck(req: Request): Response {
   return new Response("OK", { status: 200 });
 }
 
-function handleWelcomeImage(): Response {
-  if (!WELCOME_IMAGE) {
-    return new Response("Not Found", { status: 404 });
+function handleWelcomeImage(name: string | null): Response {
+  if (name) {
+    // Only allow plain filenames like welcome-07.jpg
+    if (!/^[a-zA-Z0-9._-]+\.jpg$/.test(name)) {
+      return new Response("Not Found", { status: 404 });
+    }
+    const img = WELCOME_IMAGES.find((i) => i.name === name);
+    if (!img) return new Response("Not Found", { status: 404 });
+    return new Response(img.data, {
+      headers: {
+        "content-type": "image/jpeg",
+        "cache-control": "public, max-age=86400",
+      },
+    });
   }
-  return new Response(WELCOME_IMAGE, {
+
+  const random = randomWelcomeImage();
+  if (!random) return new Response("Not Found", { status: 404 });
+  return new Response(random, {
     headers: {
       "content-type": "image/jpeg",
-      "cache-control": "public, max-age=86400",
+      "cache-control": "no-cache",
     },
   });
 }
@@ -63,7 +91,12 @@ async function handler(req: Request): Promise<Response> {
     }
 
     if (url.pathname === "/welcome.jpg") {
-      return handleWelcomeImage();
+      return handleWelcomeImage(null);
+    }
+
+    // /welcome/<filename>.jpg
+    if (url.pathname.startsWith("/welcome/")) {
+      return handleWelcomeImage(url.pathname.slice("/welcome/".length));
     }
 
     if (req.method === "POST") {
@@ -74,7 +107,7 @@ async function handler(req: Request): Promise<Response> {
         return new Response("Bad Request", { status: 400 });
       }
       // Pass the app's public base URL so the bot can build the
-      // self-hosted welcome image URL (https://<app>.koyeb.app/welcome.jpg).
+      // self-hosted welcome image URLs (https://<app>.koyeb.app/welcome/...).
       return await BotController.handleUpdate(update, getBaseUrl(req));
     }
 
